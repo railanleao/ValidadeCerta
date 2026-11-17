@@ -386,7 +386,7 @@ O ambiente roda inteiro em **Docker** — não é preciso instalar .NET SDK nem 
 cp .env.example .env
 
 # 2. Criar a solução usando o SDK do container (sem instalar nada)
-docker run --rm -v "${PWD}:/src" -w /src mcr.microsoft.com/dotnet/sdk:11.0 \
+docker run --rm -v "${PWD}:/src" -w /src mcr.microsoft.com/dotnet/sdk:10.0 \
   bash scripts/criar-solucao.sh
 
 # 3. Subir banco + aplicação
