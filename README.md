@@ -385,15 +385,31 @@ O ambiente roda inteiro em **Docker** — não é preciso instalar .NET SDK nem 
 # 1. Variáveis de ambiente
 cp .env.example .env
 
-# 2. Criar o projeto Blazor usando o SDK do container (sem instalar nada)
-docker run --rm -v "${PWD}:/src" -w /src mcr.microsoft.com/dotnet/sdk:11.0 \
-  dotnet new blazor -n ValidadeCerta.Web -o src/ValidadeCerta.Web --interactivity Server
+# 2. Criar a solução usando o SDK do container (sem instalar nada)
+docker run --rm -v "${PWD}:/src" -w /src mcr.microsoft.com/dotnet/sdk:10.0 \
+  bash scripts/criar-solucao.sh
 
 # 3. Subir banco + aplicação
 docker compose up -d
 ```
 
-> No Linux, adicione `--user $(id -u):$(id -g)` ao `docker run` para os arquivos não ficarem com dono root.
+> **Linux:** adicione `--user "$(id -u):$(id -g)" -e HOME=/tmp` ao `docker run` para os arquivos não ficarem com dono root.
+> **Windows (Git Bash):** rode pelo terminal do WSL ou prefixe o comando com `MSYS_NO_PATHCONV=1`.
+
+### Estrutura da solução
+
+```
+src/
+├── ValidadeCerta.Domain/          # Entidades, enums, value objects e regras puras
+├── ValidadeCerta.Application/     # Casos de uso, DTOs e interfaces (repositórios, storage)
+├── ValidadeCerta.Infrastructure/  # EF Core, PostgreSQL/PostGIS, storage, jobs
+└── ValidadeCerta.Web/             # Blazor Web App + endpoints (host da aplicação)
+tests/
+├── ValidadeCerta.Domain.Tests/
+└── ValidadeCerta.Application.Tests/
+```
+
+Dependências: `Web → Application + Infrastructure`, `Infrastructure → Application`, `Application → Domain`. O Domain não depende de ninguém.
 
 Acesse: **http://localhost:8080**
 
@@ -408,7 +424,10 @@ Acesse: **http://localhost:8080**
 | Abrir o Adminer (admin do banco) | `docker compose --profile tools up -d adminer` → http://localhost:8081 |
 | Rodar comando `dotnet` | `docker compose exec app dotnet <comando>` |
 | Adicionar pacote NuGet | `docker compose exec app dotnet add src/ValidadeCerta.Web package <Pacote>` |
-| Criar migration | `docker compose exec app dotnet ef migrations add <Nome> --project src/ValidadeCerta.Web` |
+| Restaurar ferramentas (uma vez) | `docker compose exec app dotnet tool restore` |
+| Criar migration | `docker compose exec app dotnet ef migrations add <Nome> --project src/ValidadeCerta.Infrastructure --startup-project src/ValidadeCerta.Web` |
+| Aplicar migrations | `docker compose exec app dotnet ef database update --project src/ValidadeCerta.Infrastructure --startup-project src/ValidadeCerta.Web` |
+| Rodar testes | `docker compose exec app dotnet test` |
 | Apagar banco e começar do zero | `docker compose down -v` |
 
 ### Consumo de memória
