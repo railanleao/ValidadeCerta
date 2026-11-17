@@ -1,0 +1,69 @@
+name: validade-certa
+
+services:
+  db:
+    image: postgis/postgis:17-3.5
+    container_name: vc-db
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-validadecerta}
+      POSTGRES_USER: ${POSTGRES_USER:-vc}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-vc_dev_123}
+    ports:
+      - "5432:5432"
+    volumes:
+      - db-data:/var/lib/postgresql/data
+      - ./docker/db/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-vc} -d ${POSTGRES_DB:-validadecerta}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+    restart: unless-stopped
+
+  app:
+    image: mcr.microsoft.com/dotnet/sdk:11.0
+    container_name: vc-app
+    working_dir: /src
+    command: >
+      dotnet watch --project src/ValidadeCerta.Web
+      run --urls http://0.0.0.0:8080 --non-interactive
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ConnectionStrings__Default: "Host=db;Port=5432;Database=${POSTGRES_DB:-validadecerta};Username=${POSTGRES_USER:-vc};Password=${POSTGRES_PASSWORD:-vc_dev_123}"
+      DOTNET_USE_POLLING_FILE_WATCHER: "true"
+      DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+    ports:
+      - "8080:8080"
+    volumes:
+      - .:/src
+      - nuget-cache:/root/.nuget/packages
+    depends_on:
+      db:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          memory: 1536M
+
+  adminer:
+    image: adminer:latest
+    container_name: vc-adminer
+    profiles: ["tools"]
+    ports:
+      - "8081:8080"
+    environment:
+      ADMINER_DEFAULT_SERVER: db
+    depends_on:
+      - db
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+
+volumes:
+  db-data:
+  nuget-cache:
