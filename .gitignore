@@ -82,6 +82,7 @@ docker/db/data/
 # ---------- Uploads e arquivos gerados em desenvolvimento ----------
 wwwroot/uploads/
 **/wwwroot/uploads/
+scripts/criar-tarefas-github.sh
 
 # ---------- Front-end (se usar ferramentas Node no futuro) ----------
 node_modules/

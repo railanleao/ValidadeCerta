@@ -1,0 +1,14 @@
+<Project>
+
+  <!--
+    Lock file do NuGet: gera um packages.lock.json em cada projeto com as versões
+    exatas (inclusive transitivas) dos pacotes. O cache do setup-dotnet no CI usa
+    esses arquivos como chave, e eles devem ser commitados.
+  -->
+  <PropertyGroup>
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+    <!-- No CI o restore falha se o lock file estiver desatualizado em vez de reescrevê-lo -->
+    <RestoreLockedMode Condition="'$(GITHUB_ACTIONS)' == 'true'">true</RestoreLockedMode>
+  </PropertyGroup>
+
+</Project>

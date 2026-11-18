@@ -1,0 +1,35 @@
+# Padrão: o Git detecta texto e normaliza as quebras de linha
+* text=auto
+
+# Scripts e arquivos lidos dentro do Linux (containers): sempre LF
+*.sh          text eol=lf
+Dockerfile    text eol=lf
+*.yml         text eol=lf
+*.yaml        text eol=lf
+.env.example  text eol=lf
+*.sql         text eol=lf
+
+# Arquivos do Visual Studio: CRLF (o VS prefere assim no Windows)
+*.sln         text eol=crlf
+
+# Código e configuração: texto, com normalização automática
+*.cs          text diff=csharp
+*.razor       text
+*.cshtml      text
+*.csproj      text
+*.props       text
+*.json        text
+*.css         text
+*.js          text
+*.md          text
+
+# Binários: o Git não mexe e não tenta mostrar diff
+*.png         binary
+*.jpg         binary
+*.jpeg        binary
+*.webp        binary
+*.ico         binary
+*.gif         binary
+*.woff        binary
+*.woff2       binary
+*.pdf         binary
