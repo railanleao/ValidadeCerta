@@ -1,0 +1,12 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/ValidadeCerta.Application/ValidadeCerta.Application.csproj" />
+    <Project Path="src/ValidadeCerta.Domain/ValidadeCerta.Domain.csproj" />
+    <Project Path="src/ValidadeCerta.Infrastructure/ValidadeCerta.Infrastructure.csproj" />
+    <Project Path="src/ValidadeCerta.Web/ValidadeCerta.Web.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/ValidadeCerta.Application.Tests/ValidadeCerta.Application.Tests.csproj" />
+    <Project Path="tests/ValidadeCerta.Domain.Tests/ValidadeCerta.Domain.Tests.csproj" />
+  </Folder>
+</Solution>
