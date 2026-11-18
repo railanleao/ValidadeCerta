@@ -1,0 +1,139 @@
+# =========================================
+# CI — Integração Contínua
+# Roda em toda Pull Request para develop ou main.
+# Se algum job falhar, a PR fica bloqueada (depois de ativar a regra de branch).
+# =========================================
+name: CI
+
+on:
+  pull_request:
+    branches: [develop, main]
+
+# Um novo push na mesma PR cancela a execução anterior (economiza minutos)
+concurrency:
+  group: ci-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+# Permissão mínima: o CI só precisa ler o código
+permissions:
+  contents: read
+
+env:
+  DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+  DOTNET_NOLOGO: "1"
+
+jobs:
+  # -----------------------------------------
+  # 1) Descobre quais áreas a PR alterou.
+  #    Os jobs seguintes usam isso para rodar só quando faz sentido.
+  # -----------------------------------------
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      dotnet: ${{ steps.filter.outputs.dotnet }}
+      docker: ${{ steps.filter.outputs.docker }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detecta as áreas alteradas no PR
+        id: filter
+        run: |
+          files=$(git diff --name-only "origin/${{ github.base_ref }}...${{ github.event.pull_request.head.sha }}")
+          echo "Arquivos alterados:"
+          echo "$files"
+
+          # Se o próprio workflow mudou, roda tudo
+          all=false
+          if echo "$files" | grep -q '^\.github/workflows/ci\.yml$'; then all=true; fi
+
+          # Código .NET: projetos, testes, solução
+          if [ "$all" = true ] || echo "$files" | grep -qE '^(src/|tests/|ValidadeCerta\.slnx$|global\.json$|Directory\..*\.props$)'; then
+            echo "dotnet=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "dotnet=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          # Imagem Docker: Dockerfile ou qualquer coisa que entre nela
+          if [ "$all" = true ] || echo "$files" | grep -qE '^(Dockerfile$|\.dockerignore$|src/)'; then
+            echo "docker=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "docker=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  # -----------------------------------------
+  # 2) Regras de segurança — rodam sempre
+  # -----------------------------------------
+  guardrails:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Bloqueia remoção de arquivos protegidos (migrations, workflows...)
+        run: bash scripts/check-protected-paths.sh "origin/${{ github.base_ref }}" "${{ github.event.pull_request.head.sha }}"
+
+      - name: Bloqueia segredos commitados (.env, certificados, chaves)
+        run: |
+          leaked=$(git ls-files | grep -P '(^|/)\.env$|(^|/)\.env\.(?!example)|\.(pfx|p12|key|pem)$|(^|/)secrets\.json$' || true)
+          if [ -n "$leaked" ]; then
+            echo "ERRO: arquivos sensíveis estão versionados:"
+            echo "$leaked"
+            exit 1
+          fi
+          echo "OK: nenhum arquivo sensível versionado."
+
+      - name: Valida a sintaxe do docker-compose.yml
+        run: docker compose config --quiet
+
+  # -----------------------------------------
+  # 3) Build, formatação e testes do .NET
+  # -----------------------------------------
+  dotnet:
+    needs: changes
+    if: needs.changes.outputs.dotnet == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Restore
+        run: dotnet restore ValidadeCerta.slnx
+
+      - name: Verifica formatação (rode "dotnet format" localmente se falhar)
+        run: dotnet format ValidadeCerta.slnx --verify-no-changes --no-restore
+
+      - name: Build
+        run: dotnet build ValidadeCerta.slnx --no-restore --configuration Release
+
+      - name: Testes (com cobertura)
+        run: >
+          dotnet test ValidadeCerta.slnx --no-build --configuration Release
+          --logger trx --results-directory TestResults
+          --collect:"XPlat Code Coverage"
+
+      - name: Guarda os resultados dos testes
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: TestResults
+          retention-days: 7
+
+  # -----------------------------------------
+  # 4) Garante que a imagem Docker (a mesma do Render) continua buildando
+  # -----------------------------------------
+  docker:
+    needs: changes
+    if: needs.changes.outputs.docker == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build da imagem de produção (sem publicar)
+        run: docker build --tag validadecerta:ci .

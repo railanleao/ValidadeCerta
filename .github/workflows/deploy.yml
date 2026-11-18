@@ -1,0 +1,67 @@
+# =========================================
+# CD — Deploy Contínuo no Render
+# Roda quando algo é mergeado na main (ou manualmente pela aba Actions).
+#
+# Pré-requisitos (uma vez só):
+#   1. No Render: Settings do serviço → "Deploy Hook" → copie a URL.
+#   2. No GitHub: Settings → Secrets and variables → Actions →
+#      New repository secret → nome RENDER_DEPLOY_HOOK_URL, valor = a URL.
+#   3. No Render: desligue o "Auto-Deploy" para quem decide o deploy ser este workflow
+#      (assim só vai para produção o que passou nos testes).
+# =========================================
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Nunca roda dois deploys ao mesmo tempo, e nunca interrompe um no meio
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+  DOTNET_NOLOGO: "1"
+
+jobs:
+  # Última verificação antes de publicar: testes + imagem Docker
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Testes
+        run: dotnet test ValidadeCerta.slnx --configuration Release
+
+      - name: Build da imagem de produção
+        run: docker build --tag validadecerta:${{ github.sha }} .
+
+  deploy:
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # Ambiente "production": no GitHub dá para exigir aprovação manual aqui
+    environment:
+      name: production
+    steps:
+      - name: Dispara o deploy no Render
+        env:
+          RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+        run: |
+          if [ -z "$RENDER_DEPLOY_HOOK_URL" ]; then
+            echo "ERRO: secret RENDER_DEPLOY_HOOK_URL não configurado." >&2
+            exit 1
+          fi
+          # Pede ao Render para buildar a main atual (o commit que acabou de passar no verify)
+          curl --fail --silent --show-error -X POST \
+            "${RENDER_DEPLOY_HOOK_URL}"
+          echo "Deploy solicitado ao Render (commit ${GITHUB_SHA})."
